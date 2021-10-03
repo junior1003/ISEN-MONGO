@@ -1,0 +1,122 @@
+import json
+from pprint import pprint
+
+import requests
+from pymongo import MongoClient
+
+
+def get_velolille():
+    url = "https://opendata.lillemetropole.fr/api/records/1.0/search/?dataset=vlille-realtime&q=&rows=3000&facet=libelle&face=commune&facet=etat&facet=type&facet=etatconnexion"
+    response = requests.request("GET", url)
+    response_json = json.loads(response.text.encode('utf8'))
+    return response_json.get("records", [])
+
+
+def get_velorennes():
+    url = "https://data.rennesmetropole.fr/api/records/1.0/search/?dataset=stations_vls&q="
+    #https://data.rennesmetropole.fr/api/records/1.0/search/?dataset=stations-reparation-velo&q=&rows=30&sort=id&facet=etat&facet=gonflage&facet=reparation
+    response = requests.request("GET", url)
+    request_json = json.loads(response.text.encode('utf8'))
+    return request_json.get("records", [])
+
+
+def get_velolyon():
+    url = "https://opendata.paris.fr/api/records/1.0/search/?dataset=velib-disponibilite-en-temps-reel&q=&facet=name&facet=is_renting&rows=300"
+    response = requests.request("GET", url, headers={}, data={})
+    request_json = json.loads(response.text.encode('utf8'))
+    return request_json.get("records", [])
+
+
+def get_veloparis():
+    url = "https://opendata.paris.fr/api/records/1.0/search/?dataset=velib-disponibilite-en-temps-reel&q=&rows=1500"
+    response = requests.request("GET", url)
+    request_json = json.loads(response.text.encode('utf8'))
+    return request_json.get("records", [])
+
+
+velolilles = get_velolille()
+velorennes = get_velorennes()
+velolyons = get_velolyon()
+veloparis = get_veloparis()
+
+#print(velorennes)
+
+velolilles_to_insert = [
+    {
+        'name': elem.get('fields', {}).get('nom', '').title(),
+        'geometry': elem.get('geometry'),
+        'size': elem.get('fields', {}).get('nbvelosdispo') + elem.get('fields', {}).get('nbplacesdispo'),
+        'source': {
+            'dataset': 'Lille',
+            'id_ext': elem.get('fields', {}).get('libelle')
+        },
+        'tpe': elem.get('fields', {}).get('type', '') == 'AVEC TPE'
+    }
+    for elem in velolilles
+]
+
+velorennes_to_insert = [
+    {
+        'name': elem.get('fields', {}).get('nom', '').title(),
+        'geometry': elem.get('geometry'),
+        'size': elem.get('fields', {}).get('nb_socles'),
+        'source': {
+            'dataset': 'Rennes',
+            'id_ext': elem.get('fields', {}).get('libelle')
+        },
+        'tpe': elem.get('fields', {}).get('tpe', '') == 'oui'
+    }
+    for elem in velorennes
+]
+
+velolyons_to_insert = [
+    {
+        'name': elem.get('fields', {}).get('name', '').title(),
+        'geometry': elem.get('geometry'),
+        'size': elem.get('fields', {}).get('available'),
+        'source': {
+            'dataset': 'Lyon',
+            'id_ext': elem.get('fields', {}).get('gid')
+        },
+        'tpe': elem.get('fields', {}).get('banking', '') == 't'
+    }
+    for elem in velolyons
+]
+
+veloparis_to_insert = [
+    {
+        'name': elem.get('fields', {}).get('name', '').title(),
+        'geometry': elem.get('geometry'),
+        'size': elem.get('fields', {}).get('capacity'),
+        'source': {
+            'dataset': 'Paris',
+            'id_ext': elem.get('fields', {}).get('stationcode')
+        },
+        'tpe': True if elem.get('fields', {}).get('is_renting') == 'OUI' else False,
+    }
+    for elem in veloparis
+]
+
+pprint(velolilles_to_insert)
+pprint(velorennes_to_insert)
+pprint(velolyons_to_insert)
+pprint(veloparis_to_insert)
+
+#client = pymongo.MongoClient("mongodb+srv://<username>:<password>@cluster0.snclp.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
+#db = client.test
+
+atlas = MongoClient('mongodb+srv://junior:junior1003@cluster0.snclp.mongodb.net/myFirstDatabase?retryWrites=true&w=majority')
+db = atlas.test
+#mongodb+srv://Junior:Nono_1003@cluster0.rgng9.mongodb.net/test
+
+
+# for vlille in vlilles_to_insert:
+#    db.stations.insert_one(vlille)
+
+db.Station_velo.insert_many(velolilles_to_insert)
+print(len(velorennes_to_insert))
+
+db.Station_velo.insert_many(velorennes_to_insert)
+db.Station_velo.insert_many(velolyons_to_insert)
+db.Station_velo.insert_many(veloparis_to_insert)
+
